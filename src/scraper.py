@@ -7,7 +7,6 @@ import sys
 import logging
 
 # --- ログ設定 ---
-# GitHub Actionsのコンソールで見やすい形式に設定
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -21,9 +20,16 @@ BASE_URL = "https://wikiwiki.jp/llll_wiki/"
 LIST_URL = "https://wikiwiki.jp/llll_wiki/%E3%82%AB%E3%83%BC%E3%83%89%E4%B8%80%E8%A6%A7"
 
 def get_soup(url):
-    """URLからBeautifulSoupオブジェクトを生成"""
+    """URLからBeautifulSoupオブジェクトを生成 (User-Agent偽装付き)"""
+    # 一般的なブラウザ（Chrome on Windows）のふりをするヘッダー
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8"
+    }
+    
     try:
-        response = requests.get(url, timeout=15)
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         return BeautifulSoup(response.content, 'html.parser')
     except Exception as e:
@@ -98,7 +104,6 @@ def parse_card_page(card_url, card_name):
             logger.debug(f"[{card_name}] 'Center Skill' table not found.")
 
         # --- 2-2. 「センタースキル:」後の表 (発動条件) ---
-        # 2-1と同じ表の場合が多いが、念のため再探索
         if cs_table:
             rows = cs_table.find_all('tr')
             for row in rows:
@@ -133,7 +138,6 @@ def parse_card_page(card_url, card_name):
             
             # --- 2-4. スキルAPの取得 ---
             ap_text = ""
-            # まず表全体から「スキルAP」項目を探す
             for row in rows:
                 cols = row.find_all(['th', 'td'])
                 for i, col in enumerate(cols):
@@ -142,7 +146,6 @@ def parse_card_page(card_url, card_name):
                             ap_text = clean_text(cols[i+1].get_text())
                         break
             
-            # 見つからず、ヘッダーにAPがある場合はLv14行から取得
             if not ap_text and "スキルAP" in header_map:
                  for row in rows[1:]:
                     cols = row.find_all(['th', 'td'])
@@ -195,14 +198,12 @@ def main():
     body = soup.find(id="body") or soup
     links = {} 
     
-    # 抽出条件の微調整（WikiWikiの一般的な構造）
     for a in body.find_all('a'):
         href = a.get('href')
         text = clean_text(a.get_text())
         
-        # リンクフィルタリング（http開始でない、テキストがある、特定の不要リンク除外）
+        # リンクフィルタリング
         if href and not href.startswith('http') and len(text) > 1:
-            # ページ内リンク(#)や編集リンクなどを除外する簡易フィルタ
             if not href.startswith('#') and 'plugin' not in href:
                 full_url = "https://wikiwiki.jp" + href
                 links[full_url] = text
@@ -212,21 +213,18 @@ def main():
 
     results = []
     
-    # ループ処理
     for i, (url, name) in enumerate(links.items(), 1):
-        # ログ出力：進捗状況 (例: [ 10/150 ] Processing: カード名)
         logger.info(f"[{i:3d}/{total_links}] Processing: {name}")
         
-        # サーバー負荷軽減のためのWait
-        time.sleep(1)
+        time.sleep(1) # Wait 1 sec
         
         try:
             card_data = parse_card_page(url, name)
             
             if card_data:
-                # 取得データの簡易チェックログ（データが空ならWarningを出すなど）
+                # データ有無の簡易チェック
                 if not card_data["skill_effect"] and not card_data["center_skill_effect"]:
-                    logger.warning(f"  -> No skill data found for {name} (Link might be invalid or structure changed)")
+                    logger.warning(f"  -> No skill data found for {name}")
                 
                 row = {
                     "name": name,
