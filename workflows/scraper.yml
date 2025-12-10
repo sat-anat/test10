@@ -1,0 +1,34 @@
+name: Scrape Card Data
+
+on:
+  workflow_dispatch: # ブラウザ上の「Run workflow」ボタンで手動実行
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Scraper
+        run: |
+          python src/scraper.py
+
+      - name: Upload TSV Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: card_data_tsv
+          path: output.tsv
+          retention-days: 5
